@@ -524,8 +524,78 @@ class NeteaseGrabber:
         except Exception as e:
             print(f"Error getting song URL: {str(e)}")
             return None
+        
+    def download_album_cover(self, album: NeteaseAlbum):
+        """Download album cover
+        
+        Args:
+            album (NeteaseAlbum): Object containing album information
+            
+        Returns:
+            str or None: Path to downloaded file if successful, None otherwise
+        """
+        try:
+            # Check if album info is valid
+            if not album or not album.album_cover_url:
+                print("Invalid album info or cover URL")
+                return None
+                
+            # Create download directory if it doesn't exist
+            download_dir = os.path.join(os.getcwd(), "Download", "Covers")
+            os.makedirs(download_dir, exist_ok=True)
+            
+            # Generate filename using album ID
+            # Most album covers are JPG images
+            filename = f"{album.album_id}.jpg"
+            file_path = os.path.join(download_dir, filename)
+            
+            # Download the file
+            print(f"Downloading album cover to {file_path}...")
+            response = requests.get(album.album_cover_url, stream=True)
+            
+            if response.status_code != 200:
+                print(f"Failed to download cover: HTTP {response.status_code}")
+                return None
+            
+            # Get file size from headers (if available)
+            total_size = int(response.headers.get('content-length', 0))
+            downloaded_size = 0
+            start_time = time.time()
+            
+            # Save the file with progress reporting
+            with open(file_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded_size += len(chunk)
+                        
+                        # Update progress bar
+                        if total_size > 0:
+                            progress = int((downloaded_size / total_size) * 100)
+                            bar_length = 30
+                            filled_length = int(bar_length * downloaded_size // total_size)
+                            bar = '█' * filled_length + '-' * (bar_length - filled_length)
+                            
+                            # Calculate download speed and ETA
+                            elapsed = time.time() - start_time
+                            speed = downloaded_size / elapsed / 1024  # KB/s
+                            if speed > 0:
+                                eta = (total_size - downloaded_size) / (speed * 1024)
+                                print(f"\r[{bar}] {progress}% | {downloaded_size/1024/1024:.1f}MB/{total_size/1024/1024:.1f}MB | {speed:.1f} KB/s | ETA: {int(eta//60)}m {int(eta%60)}s", end='')
+                            else:
+                                print(f"\r[{bar}] {progress}% | {downloaded_size/1024/1024:.1f}MB/{total_size/1024/1024:.1f}MB", end='')
+                        else:
+                            print(f"\rDownloaded: {downloaded_size/1024/1024:.1f}MB", end='')
+            
+            # Print new line after progress bar
+            print("\nCover download completed!")
+            return file_path
+            
+        except Exception as e:
+            print(f"Error downloading album cover: {str(e)}")
+            return None
     
-    def download_song(self, download_info: NeteaseSongDownloadInfo):
+    def download_song_file(self, download_info: NeteaseSongDownloadInfo):
         """Download song from NetEase Cloud Music
         
         Args:
@@ -541,14 +611,11 @@ class NeteaseGrabber:
                 return None
                 
             # Create download directory if it doesn't exist
-            download_dir = os.path.join(os.getcwd(), "Download", "Temp")
+            download_dir = os.path.join(os.getcwd(), "Download", "Songs")
             os.makedirs(download_dir, exist_ok=True)
             
             # Generate timestamp-based filename
-            timestamp = int(time.time())
-            ext = download_info.ext_name
-                
-            filename = f"{timestamp}{ext}"
+            filename = f"{download_info.song_id}{download_info.ext_name}"
             file_path = os.path.join(download_dir, filename)
             
             # Download the file
@@ -596,6 +663,20 @@ class NeteaseGrabber:
         except Exception as e:
             print(f"Error downloading song: {str(e)}")
             return None
+        
+    def merge_song_file_metadata(self, song_path, song: NeteaseSong, album: NeteaseAlbum):
+        """Download song file and merge metadata
+        
+        Args:
+            song_path (str): Path to song file
+            song (NeteaseSong): Object containing song information
+            album (NeteaseAlbum): Object containing album information
+            
+        Returns:
+            str or None: Path to downloaded file if successful, None otherwise
+        """
+        pass
+        
 
 if __name__ == "__main__":
     grabber = NeteaseGrabber()
@@ -609,6 +690,13 @@ if __name__ == "__main__":
     album = grabber.get_album_info(6394)
     print(f"Album: {album.album_name} - {album.artist.artist_name}")
     
+    # Download album cover
+    cover_path = grabber.download_album_cover(album)
+    if cover_path:
+        print(f"Album cover downloaded to: {cover_path}")
+    else:
+        print("Failed to download album cover")
+    
     # If the album has songs, try to get the download link for the first song
     if album and album.songs:
         first_song = album.songs[0]
@@ -621,7 +709,7 @@ if __name__ == "__main__":
             print(f"File extension: {download_info.ext_name}")
             
             # Download the song
-            file_path = grabber.download_song(download_info)
+            file_path = grabber.download_song_file(download_info)
             if file_path:
                 print(f"Song downloaded to: {file_path}")
             else:
