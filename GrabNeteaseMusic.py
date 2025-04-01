@@ -10,6 +10,10 @@ import io
 import json
 from PIL import Image
 from urllib.parse import urlparse
+from mutagen.id3 import ID3, APIC, TIT2, TPE1, TALB, TRCK, TPOS, TYER
+from mutagen.mp3 import MP3
+from mutagen.flac import FLAC, Picture
+from datetime import datetime
 
 class NeteaseAudioQuality(Enum):
     """Audio quality enumeration
@@ -664,18 +668,143 @@ class NeteaseGrabber:
             print(f"Error downloading song: {str(e)}")
             return None
         
-    def merge_song_file_metadata(self, song_path, song: NeteaseSong, album: NeteaseAlbum):
+    def merge_song_file_metadata(self, song_path, cover_path, song: NeteaseSong, album: NeteaseAlbum):
         """Download song file and merge metadata
         
         Args:
             song_path (str): Path to song file
+            cover_path (str): Path to cover file
             song (NeteaseSong): Object containing song information
             album (NeteaseAlbum): Object containing album information
             
         Returns:
-            str or None: Path to downloaded file if successful, None otherwise
+            bool: True if successful, False otherwise
         """
-        pass
+        try:
+            # Check if files exist
+            if not os.path.exists(song_path):
+                print(f"Song file not found: {song_path}")
+                return False
+                
+            if not os.path.exists(cover_path):
+                print(f"Cover file not found: {cover_path}")
+                # Continue without cover
+            
+            # Get file extension to determine file type
+            _, ext = os.path.splitext(song_path)
+            ext = ext.lower()
+            
+            # Read cover image data if available
+            cover_data = None
+            cover_mime = "image/jpeg"  # Default mime type
+            if os.path.exists(cover_path):
+                with open(cover_path, "rb") as f:
+                    cover_data = f.read()
+            
+            # Convert publish time from timestamp to year
+            publish_year = ""
+            if album.publish_time:
+                try:
+                    # Convert milliseconds timestamp to datetime
+                    publish_date = datetime.fromtimestamp(album.publish_time / 1000)
+                    publish_year = str(publish_date.year)
+                except:
+                    # If conversion fails, leave it blank
+                    pass
+            
+            # Handle MP3 files
+            if ext == '.mp3':
+                # Create or load ID3 tags
+                try:
+                    audio = ID3(song_path)
+                except:
+                    # If the file doesn't have an ID3 tag, create one
+                    audio = ID3()
+                
+                # Set title
+                audio["TIT2"] = TIT2(encoding=3, text=song.song_name)
+                
+                # Set artist
+                audio["TPE1"] = TPE1(encoding=3, text=album.artist.artist_name)
+                
+                # Set album
+                audio["TALB"] = TALB(encoding=3, text=album.album_name)
+                
+                # Set track number (format: track/total)
+                if song.track_number:
+                    track_str = f"{song.track_number}/{album.tracks_count}" if album.tracks_count else str(song.track_number)
+                    audio["TRCK"] = TRCK(encoding=3, text=track_str)
+                
+                # Set disc number
+                if song.cd_number:
+                    audio["TPOS"] = TPOS(encoding=3, text=song.cd_number)
+                
+                # Set year
+                if publish_year:
+                    audio["TYER"] = TYER(encoding=3, text=publish_year)
+                
+                # Add album artwork
+                if cover_data:
+                    audio["APIC"] = APIC(
+                        encoding=3,           # UTF-8
+                        mime=cover_mime,      # image/jpeg or image/png
+                        type=3,               # Cover (front)
+                        desc="Cover",
+                        data=cover_data
+                    )
+                
+                # Save the file
+                audio.save(song_path)
+                
+            # Handle FLAC files
+            elif ext == '.flac':
+                audio = FLAC(song_path)
+                
+                # Set basic metadata
+                audio["TITLE"] = song.song_name
+                audio["ARTIST"] = album.artist.artist_name
+                audio["ALBUM"] = album.album_name
+                
+                # Set track number
+                if song.track_number:
+                    audio["TRACKNUMBER"] = str(song.track_number)
+                
+                # Set total tracks
+                if album.tracks_count:
+                    audio["TOTALTRACKS"] = str(album.tracks_count)
+                
+                # Set disc number
+                if song.cd_number:
+                    audio["DISCNUMBER"] = song.cd_number
+                
+                # Set year
+                if publish_year:
+                    audio["DATE"] = publish_year
+                
+                # Add album artwork
+                if cover_data:
+                    picture = Picture()
+                    picture.type = 3                # Cover (front)
+                    picture.mime = cover_mime       # MIME type
+                    picture.desc = "Cover"          # Description
+                    picture.data = cover_data       # Image data
+                    
+                    # Add picture to the file
+                    audio.add_picture(picture)
+                
+                # Save the file
+                audio.save()
+            
+            else:
+                print(f"Unsupported file format: {ext}")
+                return False
+            
+            print(f"Successfully added metadata to {song_path}")
+            return True
+            
+        except Exception as e:
+            print(f"Error merging metadata: {str(e)}")
+            return False
         
 
 if __name__ == "__main__":
@@ -712,6 +841,12 @@ if __name__ == "__main__":
             file_path = grabber.download_song_file(download_info)
             if file_path:
                 print(f"Song downloaded to: {file_path}")
+                
+                # Merge metadata
+                if grabber.merge_song_file_metadata(file_path, cover_path, first_song, album):
+                    print("Successfully added metadata to the song")
+                else:
+                    print("Failed to add metadata")
             else:
                 print("Failed to download song")
         else:
