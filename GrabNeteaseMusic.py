@@ -14,6 +14,7 @@ from mutagen.id3 import ID3, APIC, TIT2, TPE1, TALB, TRCK, TPOS, TYER
 from mutagen.mp3 import MP3
 from mutagen.flac import FLAC, Picture
 from datetime import datetime
+import sys
 
 class NeteaseAudioQuality(Enum):
     """Audio quality enumeration
@@ -210,16 +211,19 @@ class NeteaseGrabber:
                 return False
                 
             # Step 2: Get QR code image
+            time.sleep(1)
             qr_data = self._get_login_qrcode(key)
             if not qr_data:
                 print("Failed to get QR code image")
                 return False
                 
             # Step 3: Display QR code
+            time.sleep(1)
             print("Please scan the QR code with the NetEase Cloud Music app")
             self.show_qr_code(qr_data)
             
             # Step 4: Poll login status
+            time.sleep(1)
             print("Waiting for scan and confirmation...")
             while True:
                 status = self._check_qr_login_status(key)
@@ -252,6 +256,7 @@ class NeteaseGrabber:
         Returns:
             bool: True if logout successful, False otherwise
         """
+        time.sleep(1)
         try:
             timestamp = int(time.time() * 1000)
             response = requests.get(f"{self.base_url}/logout", params={"timestamp": timestamp}, cookies=self.cookies)
@@ -410,6 +415,7 @@ class NeteaseGrabber:
         Returns:
             NeteaseAlbum or None: Album object if successful, None otherwise
         """
+        time.sleep(1)
         try:
             timestamp = int(time.time() * 1000)
             response = requests.get(f"{self.base_url}/album", 
@@ -487,6 +493,7 @@ class NeteaseGrabber:
         Returns:
             NeteaseSongDownloadInfo: Object containing song download information, or None if failed
         """
+        time.sleep(1)
         try:
             timestamp = int(time.time() * 1000)
             response = requests.get(f"{self.base_url}/song/url/v1", 
@@ -858,7 +865,7 @@ class NeteaseGrabber:
             song_name = self._sanitize_filename(song_name)
             
             # Create path components
-            music_base_dir = os.path.join(os.getcwd(), "Download", "Music")
+            music_base_dir = os.path.join(os.getcwd(), "Download", "MusicLibrary")
             artist_dir = os.path.join(music_base_dir, artist_name)
             album_dir = os.path.join(artist_dir, f"{album_year}-{album_name}")
             
@@ -916,54 +923,119 @@ class NeteaseGrabber:
 
 if __name__ == "__main__":
     grabber = NeteaseGrabber()
-    grabber.start_server()
+    print("Starting NetEase Music API server...")
+    if not grabber.start_server():
+        print("Failed to start server. Exiting...")
+        sys.exit(1)
+    print("Server started successfully!")
 
+    print("Loading cookies and checking login status...")
     grabber.load_cookies()
     if not grabber.check_login_status():
-        grabber.login()
-
-    # Test getting album information
-    album = grabber.get_album_info(6394)
-    print(f"Album: {album.album_name} - {album.artist.artist_name}")
-    
-    # Download album cover
-    cover_path = grabber.download_album_cover(album)
-    if cover_path:
-        print(f"Album cover downloaded to: {cover_path}")
+        print("Not logged in. Starting login process...")
+        if not grabber.login():
+            print("Login failed. Exiting...")
+            sys.exit(1)
+        print("Login successful!")
     else:
-        print("Failed to download album cover")
+        print("Already logged in!")
     
-    # If the album has songs, try to get the download link for the first song
-    if album and album.songs:
-        first_song = album.songs[0]
-        print(f"Song: {first_song.song_name}")
+    # Ask user for album URL
+    while True:
+        print("\nEnter NetEase album URL (or 'exit' to quit):")
+        print("Format: https://music.163.com/#/album?id=XXXXX")
+        user_input = input("> ")
         
-        # Get download information for the song
-        download_info = grabber.get_song_url(first_song.song_id)
-        if download_info and download_info.url:
-            print(f"Download URL: {download_info.url}")
-            print(f"File extension: {download_info.ext_name}")
-            
-            # Download the song
-            file_path = grabber.download_song_file(download_info)
-            if file_path:
-                print(f"Song downloaded to: {file_path}")
-                
-                # Merge metadata
-                if grabber.merge_song_file_metadata(file_path, cover_path, first_song, album):
-                    print("Successfully added metadata to the song")
-                    
-                    # Archive song to music library
-                    archive_path = grabber.archive_song_file(file_path, first_song, album)
-                    if archive_path:
-                        print(f"Song archived to: {archive_path}")
-                    else:
-                        print("Failed to archive song")
-                else:
-                    print("Failed to add metadata")
-            else:
-                print("Failed to download song")
+        if user_input.lower() == 'exit':
+            print("Exiting program...")
+            break
+        
+        # Extract album ID from URL
+        album_id = None
+        if '/album?id=' in user_input:
+            try:
+                album_id = int(user_input.split('/album?id=')[1].split('&')[0])
+                print(f"Detected album ID: {album_id}")
+            except (ValueError, IndexError):
+                print("Invalid URL format. Could not extract album ID.")
+                continue
         else:
-            print("Failed to get download URL")
+            try:
+                # Try to parse input directly as album ID
+                album_id = int(user_input)
+                print(f"Using direct album ID: {album_id}")
+            except ValueError:
+                print("Invalid input. Please enter a valid URL or album ID.")
+                continue
+        
+        # Get album information
+        print(f"Fetching album information for ID: {album_id}...")
+        album = grabber.get_album_info(album_id)
+        if not album:
+            print("Failed to get album information.")
+            continue
+        
+        print(f"\n=== Album Information ===")
+        print(f"Title: {album.album_name}")
+        print(f"Artist: {album.artist.artist_name}")
+        print(f"Tracks: {album.tracks_count}")
+        print(f"Published: {datetime.fromtimestamp(album.publish_time / 1000).strftime('%Y-%m-%d') if album.publish_time else 'Unknown'}")
+        
+        # Download album cover
+        print("\nDownloading album cover...")
+        cover_path = grabber.download_album_cover(album)
+        if cover_path:
+            print(f"Album cover downloaded to: {cover_path}")
+        else:
+            print("Failed to download album cover, continuing without cover.")
+            cover_path = None
+        
+        # Process all songs in the album
+        if album.songs:
+            print(f"\nPreparing to download {len(album.songs)} songs from album...")
+            
+            for i, song in enumerate(album.songs):
+                print(f"\n[{i+1}/{len(album.songs)}] Processing: {song.song_name}")
+                
+                # Get song download URL
+                print(f"Getting download URL for '{song.song_name}'...")
+                download_info = grabber.get_song_url(song.song_id)
+                
+                if not download_info or not download_info.url:
+                    print(f"Failed to get download URL for '{song.song_name}', skipping.")
+                    continue
+                
+                # Download the song
+                print(f"Downloading '{song.song_name}'...")
+                file_path = grabber.download_song_file(download_info)
+                
+                if not file_path:
+                    print(f"Failed to download '{song.song_name}', skipping.")
+                    continue
+                
+                # Add metadata
+                print(f"Adding metadata to '{song.song_name}'...")
+                if grabber.merge_song_file_metadata(file_path, cover_path, song, album):
+                    print(f"Successfully added metadata to '{song.song_name}'")
+                else:
+                    print(f"Failed to add metadata to '{song.song_name}', continuing anyway.")
+                
+                # Archive song
+                print(f"Archiving '{song.song_name}' to music library...")
+                archive_path = grabber.archive_song_file(file_path, song, album)
+                
+                if archive_path:
+                    print(f"Song archived to: {archive_path}")
+                else:
+                    print(f"Failed to archive '{song.song_name}'")
+            
+            print(f"\n=== Download Summary ===")
+            print(f"Album: {album.album_name} - {album.artist.artist_name}")
+            print(f"Total tracks: {len(album.songs)}")
+            print(f"All available songs have been processed!")
+        else:
+            print("No songs found in the album.")
+            
+    print("\nThank you for using GrabNeteaseMusic!")
 
-    time.sleep(30)
+    
