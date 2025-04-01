@@ -10,9 +10,10 @@ import io
 import json
 from PIL import Image
 from urllib.parse import urlparse
-from mutagen.id3 import ID3, APIC, TIT2, TPE1, TALB, TRCK, TPOS, TYER
+from mutagen.id3 import ID3, APIC, TIT2, TPE1, TPE2, TALB, TRCK, TPOS, TYER
 from mutagen.mp3 import MP3
 from mutagen.flac import FLAC, Picture
+from mutagen.mp4 import MP4
 from datetime import datetime
 import sys
 
@@ -717,11 +718,11 @@ class NeteaseGrabber:
         try:
             # Check if files exist
             if not os.path.exists(song_path):
-                print(f"Song file not found: {song_path}")
+                print_error(f"Song file not found: {song_path}")
                 return False
                 
             if not os.path.exists(cover_path):
-                print(f"Cover file not found: {cover_path}")
+                print_warning(f"Cover file not found: {cover_path}")
                 # Continue without cover
             
             # Get file extension to determine file type
@@ -761,6 +762,9 @@ class NeteaseGrabber:
                 # Set artist
                 audio["TPE1"] = TPE1(encoding=3, text=album.artist.artist_name)
                 
+                # Set album artist
+                audio["TPE2"] = TPE2(encoding=3, text=album.artist.artist_name)
+                
                 # Set album
                 audio["TALB"] = TALB(encoding=3, text=album.album_name)
                 
@@ -797,6 +801,7 @@ class NeteaseGrabber:
                 # Set basic metadata
                 audio["TITLE"] = song.song_name
                 audio["ARTIST"] = album.artist.artist_name
+                audio["ALBUMARTIST"] = album.artist.artist_name
                 audio["ALBUM"] = album.album_name
                 
                 # Set track number
@@ -828,16 +833,68 @@ class NeteaseGrabber:
                 
                 # Save the file
                 audio.save()
+                
+            # Handle M4A files
+            elif ext == '.m4a' or ext == '.aac':
+                audio = MP4(song_path)
+                
+                # MP4/M4A tags use different naming scheme
+                # Title
+                audio["\xa9nam"] = [song.song_name]
+                
+                # Artist
+                audio["\xa9ART"] = [album.artist.artist_name]
+                
+                # Album Artist
+                audio["aART"] = [album.artist.artist_name]
+                
+                # Album
+                audio["\xa9alb"] = [album.album_name]
+                
+                # Track number (format: [track, total])
+                if song.track_number:
+                    track_num = int(song.track_number)
+                    total_tracks = int(album.tracks_count) if album.tracks_count else 0
+                    # iTunes-style track number tuple (track, total)
+                    audio["trkn"] = [(track_num, total_tracks)]
+                
+                # Disc number
+                if song.cd_number:
+                    try:
+                        disc_num = int(song.cd_number)
+                        # iTunes-style disc number tuple (disc, total discs)
+                        audio["disk"] = [(disc_num, 0)]
+                    except ValueError:
+                        pass
+                
+                # Year
+                if publish_year:
+                    audio["\xa9day"] = [publish_year]
+                
+                # Add album artwork
+                if cover_data:
+                    from mutagen.mp4 import MP4Cover
+                    if cover_mime == "image/jpeg":
+                        cover_format = MP4Cover.FORMAT_JPEG
+                    elif cover_mime == "image/png":
+                        cover_format = MP4Cover.FORMAT_PNG
+                    else:
+                        cover_format = MP4Cover.FORMAT_JPEG
+                    
+                    audio["covr"] = [MP4Cover(cover_data, cover_format)]
+                
+                # Save the file
+                audio.save()
             
             else:
-                print(f"Unsupported file format: {ext}")
+                print_error(f"Unsupported file format: {ext}")
                 return False
             
-            print(f"Successfully added metadata to {song_path}")
+            print_success(f"Successfully added metadata to {song_path}")
             return True
             
         except Exception as e:
-            print(f"Error merging metadata: {str(e)}")
+            print_error(f"Error merging metadata: {str(e)}")
             return False
         
     def archive_song_file(self, song_path, song: NeteaseSong, album: NeteaseAlbum):
