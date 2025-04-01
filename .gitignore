@@ -47,3 +47,4 @@ package.json
 downloads/
 config.ini
 .env 
+cookies.json
