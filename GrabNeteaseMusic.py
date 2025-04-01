@@ -524,6 +524,78 @@ class NeteaseGrabber:
         except Exception as e:
             print(f"Error getting song URL: {str(e)}")
             return None
+    
+    def download_song(self, download_info: NeteaseSongDownloadInfo):
+        """Download song from NetEase Cloud Music
+        
+        Args:
+            download_info (NeteaseSongDownloadInfo): Object containing song download information
+            
+        Returns:
+            str or None: Path to downloaded file if successful, None otherwise
+        """
+        try:
+            # Check if download info is valid
+            if not download_info or not download_info.url:
+                print("Invalid download info or URL")
+                return None
+                
+            # Create download directory if it doesn't exist
+            download_dir = os.path.join(os.getcwd(), "Download", "Temp")
+            os.makedirs(download_dir, exist_ok=True)
+            
+            # Generate timestamp-based filename
+            timestamp = int(time.time())
+            ext = download_info.ext_name
+                
+            filename = f"{timestamp}{ext}"
+            file_path = os.path.join(download_dir, filename)
+            
+            # Download the file
+            print(f"Downloading song to {file_path}...")
+            response = requests.get(download_info.url, stream=True)
+            
+            if response.status_code != 200:
+                print(f"Failed to download: HTTP {response.status_code}")
+                return None
+            
+            # Get file size from headers (if available)
+            total_size = int(response.headers.get('content-length', 0))
+            downloaded_size = 0
+            start_time = time.time()
+            
+            # Save the file with progress reporting
+            with open(file_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded_size += len(chunk)
+                        
+                        # Update progress bar
+                        if total_size > 0:
+                            progress = int((downloaded_size / total_size) * 100)
+                            bar_length = 30
+                            filled_length = int(bar_length * downloaded_size // total_size)
+                            bar = '█' * filled_length + '-' * (bar_length - filled_length)
+                            
+                            # Calculate download speed and ETA
+                            elapsed = time.time() - start_time
+                            speed = downloaded_size / elapsed / 1024  # KB/s
+                            if speed > 0:
+                                eta = (total_size - downloaded_size) / (speed * 1024)
+                                print(f"\r[{bar}] {progress}% | {downloaded_size/1024/1024:.1f}MB/{total_size/1024/1024:.1f}MB | {speed:.1f} KB/s | ETA: {int(eta//60)}m {int(eta%60)}s", end='')
+                            else:
+                                print(f"\r[{bar}] {progress}% | {downloaded_size/1024/1024:.1f}MB/{total_size/1024/1024:.1f}MB", end='')
+                        else:
+                            print(f"\rDownloaded: {downloaded_size/1024/1024:.1f}MB", end='')
+            
+            # Print new line after progress bar
+            print("\nDownload completed!")
+            return file_path
+            
+        except Exception as e:
+            print(f"Error downloading song: {str(e)}")
+            return None
 
 if __name__ == "__main__":
     grabber = NeteaseGrabber()
@@ -547,6 +619,13 @@ if __name__ == "__main__":
         if download_info and download_info.url:
             print(f"Download URL: {download_info.url}")
             print(f"File extension: {download_info.ext_name}")
+            
+            # Download the song
+            file_path = grabber.download_song(download_info)
+            if file_path:
+                print(f"Song downloaded to: {file_path}")
+            else:
+                print("Failed to download song")
         else:
             print("Failed to get download URL")
 
