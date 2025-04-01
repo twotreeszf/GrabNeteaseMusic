@@ -9,6 +9,7 @@ import base64
 import io
 import json
 from PIL import Image
+from urllib.parse import urlparse
 
 class NeteaseAudioQuality(Enum):
     """Audio quality enumeration
@@ -35,6 +36,15 @@ class NeteaseSong:
 
     def add_quality(self, quality: NeteaseAudioQuality):
         self.avalibe_qualities.append(quality)
+
+class NeteaseSongDownloadInfo:
+    def __init__(self, song_id, ext_name, url):
+        self.song_id = song_id
+        self.ext_name = ext_name
+        self.url = url
+        
+    def __str__(self):
+        return f"Download Info - Song ID: {self.song_id}, Extension: {self.ext_name}, URL available: {'Yes' if self.url else 'No'}"
 
 class NeteaseArtist:
     def __init__(self, artist_id, artist_name):
@@ -399,7 +409,7 @@ class NeteaseGrabber:
         try:
             timestamp = int(time.time() * 1000)
             response = requests.get(f"{self.base_url}/album", 
-                                 params={"id": album_id, "timestamp": timestamp},
+                                 params={"id": album_id},
                                  cookies=self.cookies)
             if response.status_code != 200:
                 return None
@@ -463,8 +473,57 @@ class NeteaseGrabber:
             print(f"Error getting album info: {str(e)}")
             return None
 
-    def get_song_url(self):
-        pass
+    def get_song_url(self, song_id, quality: NeteaseAudioQuality = NeteaseAudioQuality.EXHIGH):
+        """Get song download URL and information
+        
+        Args:
+            song_id (int): Song ID
+            quality (NeteaseAudioQuality, optional): Desired audio quality. Defaults to EXHIGH.
+            
+        Returns:
+            NeteaseSongDownloadInfo: Object containing song download information, or None if failed
+        """
+        try:
+            timestamp = int(time.time() * 1000)
+            response = requests.get(f"{self.base_url}/song/url/v1", 
+                                  params={
+                                      "id": song_id, 
+                                      "level": quality.value
+                                  },
+                                  cookies=self.cookies)
+            
+            if response.status_code != 200:
+                return None
+                
+            data = response.json()
+            
+            # Check if data exists and has at least one item
+            if data.get('code') != 200 or not data.get('data') or len(data.get('data')) == 0:
+                return None
+                
+            # Get the first item's URL
+            song_url = data.get('data')[0].get('url')
+            song_ext_name = None
+            
+            # Extract file extension from URL if URL exists
+            if song_url:
+                try:
+                    parsed_url = urlparse(song_url)
+                    file_name = os.path.basename(parsed_url.path)
+                    _, song_ext_name = os.path.splitext(file_name)
+                except Exception as e:
+                    print(f"Error parsing URL extension: {str(e)}")
+            
+            # Create and return download info object
+            return NeteaseSongDownloadInfo(
+                song_id=song_id,
+                ext_name=song_ext_name,
+                url=song_url
+            )
+            
+        except Exception as e:
+            print(f"Error getting song URL: {str(e)}")
+            return None
 
 if __name__ == "__main__":
     grabber = NeteaseGrabber()
@@ -474,9 +533,21 @@ if __name__ == "__main__":
     if not grabber.check_login_status():
         grabber.login()
 
+    # Test getting album information
     album = grabber.get_album_info(6394)
-    print(album)
+    print(f"Album: {album.album_name} - {album.artist.artist_name}")
+    
+    # If the album has songs, try to get the download link for the first song
+    if album and album.songs:
+        first_song = album.songs[0]
+        print(f"Song: {first_song.song_name}")
+        
+        # Get download information for the song
+        download_info = grabber.get_song_url(first_song.song_id)
+        if download_info and download_info.url:
+            print(f"Download URL: {download_info.url}")
+            print(f"File extension: {download_info.ext_name}")
+        else:
+            print("Failed to get download URL")
 
     time.sleep(30)
-    
-    
