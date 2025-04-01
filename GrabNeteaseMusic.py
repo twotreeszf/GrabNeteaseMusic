@@ -26,9 +26,11 @@ class NeteaseAudioQuality(Enum):
     HIRES = 'hires'
 
 class NeteaseSong:
-    def __init__(self, song_id, song_name):
+    def __init__(self, song_id, song_name, cd_number, track_number):
         self.song_id = song_id
         self.song_name = song_name
+        self.cd_number = cd_number
+        self.track_number = track_number
         self.avalibe_qualities = []
 
     def add_quality(self, quality: NeteaseAudioQuality):
@@ -385,8 +387,81 @@ class NeteaseGrabber:
             print(f"Error checking QR login status: {str(e)}")
             return None
     
-    def get_album_info(self):
-        pass
+    def get_album_info(self, album_id):
+        """Get album information
+        
+        Args:
+            album_id (int): Album ID
+            
+        Returns:
+            NeteaseAlbum or None: Album object if successful, None otherwise
+        """
+        try:
+            timestamp = int(time.time() * 1000)
+            response = requests.get(f"{self.base_url}/album", 
+                                 params={"id": album_id, "timestamp": timestamp},
+                                 cookies=self.cookies)
+            if response.status_code != 200:
+                return None
+                
+            data = response.json()
+            
+            # Check if resource is available
+            if not data.get('resourceState'):
+                print("Album resource is not available")
+                return None
+                
+            # Parse album information
+            album_data = data.get('album', {})
+            artist_data = album_data.get('artist', {})
+            
+            # Create artist object
+            artist = NeteaseArtist(
+                artist_id=artist_data.get('id'),
+                artist_name=artist_data.get('name')
+            )
+            
+            # Create album object
+            album = NeteaseAlbum(
+                album_id=album_data.get('id'),
+                album_name=album_data.get('name'),
+                publish_time=album_data.get('publishTime'),
+                publish_company=album_data.get('company'),
+                tracks_count=album_data.get('size'),
+                album_cover_url=album_data.get('picUrl'),
+                artist=artist
+            )
+            
+            # Parse songs
+            songs_data = data.get('songs', [])
+            for song_data in songs_data:
+                # Create song object
+                song = NeteaseSong(
+                    song_id=song_data.get('id'),
+                    song_name=song_data.get('name'),
+                    cd_number=song_data.get('cd'),
+                    track_number=song_data.get('no')
+                )
+                
+                # Add available qualities
+                if song_data.get('hr'):
+                    song.add_quality(NeteaseAudioQuality.HIRES)
+                if song_data.get('sq'):
+                    song.add_quality(NeteaseAudioQuality.LOSSLESS)
+                if song_data.get('h'):
+                    song.add_quality(NeteaseAudioQuality.EXHIGH)
+                if song_data.get('m'):
+                    song.add_quality(NeteaseAudioQuality.HIGHER)
+                if song_data.get('l'):
+                    song.add_quality(NeteaseAudioQuality.STANDARD)
+                    
+                album.add_song(song)
+                
+            return album
+            
+        except Exception as e:
+            print(f"Error getting album info: {str(e)}")
+            return None
 
     def get_song_url(self):
         pass
@@ -398,6 +473,9 @@ if __name__ == "__main__":
     grabber.load_cookies()
     if not grabber.check_login_status():
         grabber.login()
+
+    album = grabber.get_album_info(6394)
+    print(album)
 
     time.sleep(30)
     
