@@ -806,6 +806,113 @@ class NeteaseGrabber:
             print(f"Error merging metadata: {str(e)}")
             return False
         
+    def archive_song_file(self, song_path, song: NeteaseSong, album: NeteaseAlbum):
+        """Archive song file
+        
+        Args:
+            song_path (str): Path to song file
+            song (NeteaseSong): Object containing song information
+            album (NeteaseAlbum): Object containing album information
+            
+        Returns:
+            str or None: Path to archived file if successful, None otherwise
+        """
+        try:
+            # Check if files exist
+            if not os.path.exists(song_path):
+                print(f"Song file not found: {song_path}")
+                return None
+                
+            # Get file extension
+            _, ext = os.path.splitext(song_path)
+            
+            # Process artist name
+            artist_name = album.artist.artist_name
+            artist_name = self._sanitize_filename(artist_name)
+            
+            # Process album year from publish time
+            album_year = ""
+            if album.publish_time:
+                try:
+                    # Convert milliseconds timestamp to datetime
+                    publish_date = datetime.fromtimestamp(album.publish_time / 1000)
+                    album_year = str(publish_date.year)
+                except:
+                    # If conversion fails, use unknown
+                    album_year = "Unknown"
+            else:
+                album_year = "Unknown"
+                
+            # Process album name
+            album_name = album.album_name
+            album_name = self._sanitize_filename(album_name)
+            
+            # Process CD number
+            cd_number = song.cd_number if song.cd_number else "01"
+            
+            # Process track number
+            track_number = str(song.track_number).zfill(2) if song.track_number else "00"
+            
+            # Process song name
+            song_name = song.song_name
+            song_name = self._sanitize_filename(song_name)
+            
+            # Create path components
+            music_base_dir = os.path.join(os.getcwd(), "Download", "Music")
+            artist_dir = os.path.join(music_base_dir, artist_name)
+            album_dir = os.path.join(artist_dir, f"{album_year}-{album_name}")
+            
+            # Create final filename
+            filename = f"{cd_number}-{track_number}-{song_name}{ext}"
+            dest_path = os.path.join(album_dir, filename)
+            
+            # Create directory structure
+            os.makedirs(album_dir, exist_ok=True)
+            
+            # Check if file already exists
+            if os.path.exists(dest_path):
+                print(f"Warning: File already exists at {dest_path}")
+                # Append number to filename to make it unique
+                base_name, ext = os.path.splitext(filename)
+                counter = 1
+                while os.path.exists(os.path.join(album_dir, f"{base_name} ({counter}){ext}")):
+                    counter += 1
+                filename = f"{base_name} ({counter}){ext}"
+                dest_path = os.path.join(album_dir, filename)
+            
+            # Copy file to destination
+            import shutil
+            shutil.copy2(song_path, dest_path)
+            
+            print(f"Archived song to: {dest_path}")
+            return dest_path
+            
+        except Exception as e:
+            print(f"Error archiving song: {str(e)}")
+            return None
+    
+    def _sanitize_filename(self, filename):
+        """Remove illegal characters from filename
+        
+        Args:
+            filename (str): Original filename
+            
+        Returns:
+            str: Sanitized filename
+        """
+        # Replace characters that are not allowed in filenames
+        invalid_chars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*']
+        for char in invalid_chars:
+            filename = filename.replace(char, '_')
+        
+        # Trim excessive whitespace and dots
+        filename = filename.strip().strip('.')
+        
+        # Ensure the filename is not empty
+        if not filename:
+            filename = "unnamed"
+            
+        return filename
 
 if __name__ == "__main__":
     grabber = NeteaseGrabber()
@@ -845,6 +952,13 @@ if __name__ == "__main__":
                 # Merge metadata
                 if grabber.merge_song_file_metadata(file_path, cover_path, first_song, album):
                     print("Successfully added metadata to the song")
+                    
+                    # Archive song to music library
+                    archive_path = grabber.archive_song_file(file_path, first_song, album)
+                    if archive_path:
+                        print(f"Song archived to: {archive_path}")
+                    else:
+                        print("Failed to archive song")
                 else:
                     print("Failed to add metadata")
             else:
