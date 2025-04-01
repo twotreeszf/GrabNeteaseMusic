@@ -16,6 +16,33 @@ from mutagen.flac import FLAC, Picture
 from datetime import datetime
 import sys
 
+# Terminal colors
+class Colors:
+    GREEN = '\033[92m'
+    BLUE = '\033[94m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    PURPLE = '\033[95m'
+    CYAN = '\033[96m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    END = '\033[0m'
+
+def print_success(message):
+    print(f"{Colors.GREEN}{message}{Colors.END}")
+
+def print_info(message):
+    print(message)
+
+def print_error(message):
+    print(f"{Colors.RED}{message}{Colors.END}")
+
+def print_warning(message):
+    print(f"{Colors.YELLOW}{message}{Colors.END}")
+
+def print_highlight(message):
+    print(f"{Colors.BOLD}{message}{Colors.END}")
+
 class NeteaseAudioQuality(Enum):
     """Audio quality enumeration
     
@@ -207,47 +234,47 @@ class NeteaseGrabber:
             # Step 1: Get QR code key
             key = self._get_login_qrkey()
             if not key:
-                print("Failed to get QR code key")
+                print_error("Failed to get QR code key")
                 return False
                 
             # Step 2: Get QR code image
             time.sleep(1)
             qr_data = self._get_login_qrcode(key)
             if not qr_data:
-                print("Failed to get QR code image")
+                print_error("Failed to get QR code image")
                 return False
                 
             # Step 3: Display QR code
             time.sleep(1)
-            print("Please scan the QR code with the NetEase Cloud Music app")
+            print_highlight("Please scan the QR code with the NetEase Cloud Music app")
             self.show_qr_code(qr_data)
             
             # Step 4: Poll login status
             time.sleep(1)
-            print("Waiting for scan and confirmation...")
+            print_info("Waiting for scan and confirmation...")
             while True:
                 status = self._check_qr_login_status(key)
                 if not status:
-                    print("Error checking login status")
+                    print_error("Error checking login status")
                     return False
                     
                 if status['code'] == 803:
                     self.cookies = self._parse_cookies(status['cookie'])
                     self.save_cookies()
-                    print("Login successful!")
+                    print_success("Login successful!")
                     return True
                 elif status['code'] == 800:
-                    print("QR code expired")
+                    print_error("QR code expired")
                     return False
                 elif status['code'] == 802:
-                    print("QR code scanned, waiting for confirmation...")
+                    print_info("QR code scanned, waiting for confirmation...")
                 elif status['code'] == 801:
                     pass  # Still waiting for scan, no need to print repeatedly
                 
                 time.sleep(1)  # Poll every 1 second
                 
         except Exception as e:
-            print(f"Error during login process: {str(e)}")
+            print_error(f"Error during login process: {str(e)}")
             return False
 
     def logout(self):
@@ -548,7 +575,7 @@ class NeteaseGrabber:
         try:
             # Check if album info is valid
             if not album or not album.album_cover_url:
-                print("Invalid album info or cover URL")
+                print_error("Invalid album info or cover URL")
                 return None
                 
             # Create download directory if it doesn't exist
@@ -561,11 +588,11 @@ class NeteaseGrabber:
             file_path = os.path.join(download_dir, filename)
             
             # Download the file
-            print(f"Downloading album cover to {file_path}...")
+            print_info(f"Downloading album cover to {file_path}...")
             response = requests.get(album.album_cover_url, stream=True)
             
             if response.status_code != 200:
-                print(f"Failed to download cover: HTTP {response.status_code}")
+                print_error(f"Failed to download cover: HTTP {response.status_code}")
                 return None
             
             # Get file size from headers (if available)
@@ -599,11 +626,11 @@ class NeteaseGrabber:
                             print(f"\rDownloaded: {downloaded_size/1024/1024:.1f}MB", end='')
             
             # Print new line after progress bar
-            print("\nCover download completed!")
+            print_success("\nCover download completed!")
             return file_path
             
         except Exception as e:
-            print(f"Error downloading album cover: {str(e)}")
+            print_error(f"Error downloading album cover: {str(e)}")
             return None
     
     def download_song_file(self, download_info: NeteaseSongDownloadInfo):
@@ -618,7 +645,7 @@ class NeteaseGrabber:
         try:
             # Check if download info is valid
             if not download_info or not download_info.url:
-                print("Invalid download info or URL")
+                print_error("Invalid download info or URL")
                 return None
                 
             # Create download directory if it doesn't exist
@@ -630,11 +657,11 @@ class NeteaseGrabber:
             file_path = os.path.join(download_dir, filename)
             
             # Download the file
-            print(f"Downloading song to {file_path}...")
+            print_info(f"Downloading song to {file_path}...")
             response = requests.get(download_info.url, stream=True)
             
             if response.status_code != 200:
-                print(f"Failed to download: HTTP {response.status_code}")
+                print_error(f"Failed to download: HTTP {response.status_code}")
                 return None
             
             # Get file size from headers (if available)
@@ -672,7 +699,7 @@ class NeteaseGrabber:
             return file_path
             
         except Exception as e:
-            print(f"Error downloading song: {str(e)}")
+            print_error(f"Error downloading song: {str(e)}")
             return None
         
     def merge_song_file_metadata(self, song_path, cover_path, song: NeteaseSong, album: NeteaseAlbum):
@@ -923,31 +950,31 @@ class NeteaseGrabber:
 
 if __name__ == "__main__":
     grabber = NeteaseGrabber()
-    print("Starting NetEase Music API server...")
+    print_info("Starting NetEase Music API server...")
     if not grabber.start_server():
-        print("Failed to start server. Exiting...")
+        print_error("Failed to start server. Exiting...")
         sys.exit(1)
-    print("Server started successfully!")
+    print_success("Server started successfully!")
 
-    print("Loading cookies and checking login status...")
+    print_info("Loading cookies and checking login status...")
     grabber.load_cookies()
     if not grabber.check_login_status():
-        print("Not logged in. Starting login process...")
+        print_info("Not logged in. Starting login process...")
         if not grabber.login():
-            print("Login failed. Exiting...")
+            print_error("Login failed. Exiting...")
             sys.exit(1)
-        print("Login successful!")
+        print_success("Login successful!")
     else:
-        print("Already logged in!")
+        print_success("Already logged in!")
     
     # Ask user for album URL
     while True:
-        print("\nEnter NetEase album URL (or 'exit' to quit):")
-        print("Format: https://music.163.com/#/album?id=XXXXX")
+        print_highlight("\nEnter NetEase album URL (or 'exit' to quit):")
+        print_info("Format: https://music.163.com/#/album?id=XXXXX")
         user_input = input("> ")
         
         if user_input.lower() == 'exit':
-            print("Exiting program...")
+            print_info("Exiting program...")
             break
         
         # Extract album ID from URL
@@ -955,87 +982,90 @@ if __name__ == "__main__":
         if '/album?id=' in user_input:
             try:
                 album_id = int(user_input.split('/album?id=')[1].split('&')[0])
-                print(f"Detected album ID: {album_id}")
+                print_info(f"Detected album ID: {album_id}")
             except (ValueError, IndexError):
-                print("Invalid URL format. Could not extract album ID.")
+                print_error("Invalid URL format. Could not extract album ID.")
                 continue
         else:
             try:
                 # Try to parse input directly as album ID
                 album_id = int(user_input)
-                print(f"Using direct album ID: {album_id}")
+                print_info(f"Using direct album ID: {album_id}")
             except ValueError:
-                print("Invalid input. Please enter a valid URL or album ID.")
+                print_error("Invalid input. Please enter a valid URL or album ID.")
                 continue
         
         # Get album information
-        print(f"Fetching album information for ID: {album_id}...")
+        print_info(f"Fetching album information for ID: {album_id}...")
         album = grabber.get_album_info(album_id)
         if not album:
-            print("Failed to get album information.")
+            print_error("Failed to get album information.")
             continue
         
-        print(f"\n=== Album Information ===")
-        print(f"Title: {album.album_name}")
-        print(f"Artist: {album.artist.artist_name}")
-        print(f"Tracks: {album.tracks_count}")
-        print(f"Published: {datetime.fromtimestamp(album.publish_time / 1000).strftime('%Y-%m-%d') if album.publish_time else 'Unknown'}")
+        print_highlight(f"\n=== Album Information ===")
+        print_success(f"Title: {album.album_name}")
+        print_success(f"Artist: {album.artist.artist_name}")
+        print_success(f"Tracks: {album.tracks_count}")
+        print_success(f"Published: {datetime.fromtimestamp(album.publish_time / 1000).strftime('%Y-%m-%d') if album.publish_time else 'Unknown'}")
         
         # Download album cover
-        print("\nDownloading album cover...")
+        print_info("\nDownloading album cover...")
         cover_path = grabber.download_album_cover(album)
         if cover_path:
-            print(f"Album cover downloaded to: {cover_path}")
+            print_success(f"Album cover downloaded to: {cover_path}")
         else:
-            print("Failed to download album cover, continuing without cover.")
+            print_warning("Failed to download album cover, continuing without cover.")
             cover_path = None
         
         # Process all songs in the album
         if album.songs:
-            print(f"\nPreparing to download {len(album.songs)} songs from album...")
+            print_highlight(f"\nPreparing to download {len(album.songs)} songs from album...")
             
+            success_count = 0
             for i, song in enumerate(album.songs):
-                print(f"\n[{i+1}/{len(album.songs)}] Processing: {song.song_name}")
+                print_highlight(f"\n[{i+1}/{len(album.songs)}] Processing: {song.song_name}")
                 
                 # Get song download URL
-                print(f"Getting download URL for '{song.song_name}'...")
+                print_info(f"Getting download URL for '{song.song_name}'...")
                 download_info = grabber.get_song_url(song.song_id)
                 
                 if not download_info or not download_info.url:
-                    print(f"Failed to get download URL for '{song.song_name}', skipping.")
+                    print_error(f"Failed to get download URL for '{song.song_name}', skipping.")
                     continue
                 
                 # Download the song
-                print(f"Downloading '{song.song_name}'...")
+                print_info(f"Downloading '{song.song_name}'...")
                 file_path = grabber.download_song_file(download_info)
                 
                 if not file_path:
-                    print(f"Failed to download '{song.song_name}', skipping.")
+                    print_error(f"Failed to download '{song.song_name}', skipping.")
                     continue
                 
                 # Add metadata
-                print(f"Adding metadata to '{song.song_name}'...")
+                print_info(f"Adding metadata to '{song.song_name}'...")
                 if grabber.merge_song_file_metadata(file_path, cover_path, song, album):
-                    print(f"Successfully added metadata to '{song.song_name}'")
+                    print_success(f"Successfully added metadata to '{song.song_name}'")
                 else:
-                    print(f"Failed to add metadata to '{song.song_name}', continuing anyway.")
+                    print_warning(f"Failed to add metadata to '{song.song_name}', continuing anyway.")
                 
                 # Archive song
-                print(f"Archiving '{song.song_name}' to music library...")
+                print_info(f"Archiving '{song.song_name}' to music library...")
                 archive_path = grabber.archive_song_file(file_path, song, album)
                 
                 if archive_path:
-                    print(f"Song archived to: {archive_path}")
+                    print_success(f"Song archived to: {archive_path}")
+                    success_count += 1
                 else:
-                    print(f"Failed to archive '{song.song_name}'")
+                    print_error(f"Failed to archive '{song.song_name}'")
             
-            print(f"\n=== Download Summary ===")
-            print(f"Album: {album.album_name} - {album.artist.artist_name}")
-            print(f"Total tracks: {len(album.songs)}")
-            print(f"All available songs have been processed!")
+            print_highlight(f"\n=== Download Summary ===")
+            print_success(f"Album: {album.album_name} - {album.artist.artist_name}")
+            print_success(f"Total tracks: {len(album.songs)}")
+            print_success(f"Successfully downloaded: {success_count}/{len(album.songs)}")
+            print_success(f"All available songs have been processed!")
         else:
-            print("No songs found in the album.")
+            print_warning("No songs found in the album.")
             
-    print("\nThank you for using GrabNeteaseMusic!")
+    print_success("\nThank you for using GrabNeteaseMusic!")
 
     
