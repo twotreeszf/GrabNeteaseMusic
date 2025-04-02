@@ -33,31 +33,65 @@ A powerful Python tool for downloading albums from NetEase Cloud Music, featurin
 ## Requirements
 
 - Python 3.6+
-- Node.js (for NetEase Cloud Music API)
+- Node.js (Latest LTS version recommended)
 - Required Python packages:
   - requests
   - Pillow
   - mutagen
+  - qrcode
+  - tqdm
+  - python-dotenv
 
 ## Installation
 
-1. Clone the repository:
+1. Install Python:
+   - Download and install Python 3.6+ from https://www.python.org/
+   - Or use your preferred package manager:
+     ```bash
+     # macOS (using Homebrew)
+     brew install python
+
+     # Linux (Ubuntu/Debian)
+     sudo apt update
+     sudo apt install python3 python3-pip
+
+     # Windows (using Chocolatey)
+     choco install python
+     ```
+   - Verify the installation:
+     ```bash
+     python --version  # Should show Python 3.6.x or higher
+     pip --version     # Should show pip version
+     ```
+
+2. Install Node.js:
+   - Download and install the latest LTS version from https://nodejs.org/
+   - Or use your preferred package manager:
+     ```bash
+     # macOS (using Homebrew)
+     brew install node
+
+     # Linux (using nvm)
+     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+     source ~/.bashrc  # or source ~/.zshrc
+     nvm install --lts
+     
+     # Windows (using Chocolatey)
+     choco install nodejs
+     ```
+
+3. Clone the repository:
 ```bash
 git clone https://github.com/twotreeszf/GrabNeteaseMusic.git
 cd GrabNeteaseMusic
 ```
 
-2. Install Python dependencies:
+4. Install Python dependencies:
 ```bash
+# You might need to use pip3 instead of pip on some systems
 pip install -r requirements.txt
 ```
 
-3. Install NetEase Cloud Music API:
-```bash
-git clone https://github.com/Binaryify/NeteaseCloudMusicApi.git
-cd NeteaseCloudMusicApi
-npm install
-```
 
 ## Usage
 
