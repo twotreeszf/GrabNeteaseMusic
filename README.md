@@ -119,13 +119,13 @@ Downloaded files will be organized as follows:
 ```
 Download/
 ├── Covers/
-│   └── [AlbumID].jpg
+│   └── [AlbumID].jpg            # Album cover image (e.g., "12345678.jpg")
 ├── Songs/
-│   └── [Temporary download files]
+│   └── [SongID][Extension]      # Temporary song files (e.g., "87654321.mp3")
 └── MusicLibrary/
     └── [Artist]/
         └── [Year]-[Album]/
-            └── [DiscNumber]-[TrackNumber]-[SongName].[Format]
+            └── [DiscNumber]-[TrackNumber]-[SongName][Extension]
 ```
 
 ## Important Notes
