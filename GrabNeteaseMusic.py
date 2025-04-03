@@ -897,7 +897,60 @@ class NeteaseGrabber:
             print_error(f"Error merging metadata: {str(e)}")
             return False
         
-    def archive_song_file(self, song_path, song: NeteaseSong, album: NeteaseAlbum):
+    def get_archive_path(self, song: NeteaseSong, album: NeteaseAlbum, ext: str) -> str:
+        """Get the destination path for the song file
+        
+        Args:
+            song (NeteaseSong): Object containing song information
+            album (NeteaseAlbum): Object containing album information
+            ext (str): File extension
+            
+        Returns:
+            str: Destination path for the song file
+        """
+        # Process artist name
+        artist_name = album.artist.artist_name
+        artist_name = self._sanitize_filename(artist_name)
+        
+        # Process album year from publish time
+        album_year = ""
+        if album.publish_time:
+            try:
+                # Convert milliseconds timestamp to datetime
+                publish_date = datetime.fromtimestamp(album.publish_time / 1000)
+                album_year = str(publish_date.year)
+            except:
+                # If conversion fails, use unknown
+                album_year = "Unknown"
+        else:
+            album_year = "Unknown"
+            
+        # Process album name
+        album_name = album.album_name
+        album_name = self._sanitize_filename(album_name)
+        
+        # Process CD number
+        cd_number = song.cd_number if song.cd_number else "01"
+        
+        # Process track number
+        track_number = str(song.track_number).zfill(2) if song.track_number else "00"
+        
+        # Process song name
+        song_name = song.song_name
+        song_name = self._sanitize_filename(song_name)
+        
+        # Create path components
+        music_base_dir = os.path.join(os.getcwd(), "Download", "MusicLibrary")
+        artist_dir = os.path.join(music_base_dir, artist_name)
+        album_dir = os.path.join(artist_dir, f"{album_year}-{album_name}")
+        
+        # Create final filename
+        filename = f"{cd_number}-{track_number}-{song_name}{ext}"
+        dest_path = os.path.join(album_dir, filename)
+        
+        return dest_path
+
+    def archive_song_file(self, song_path, ext, song: NeteaseSong, album: NeteaseAlbum):
         """Archive song file
         
         Args:
@@ -914,62 +967,11 @@ class NeteaseGrabber:
                 print(f"Song file not found: {song_path}")
                 return None
                 
-            # Get file extension
-            _, ext = os.path.splitext(song_path)
-            
-            # Process artist name
-            artist_name = album.artist.artist_name
-            artist_name = self._sanitize_filename(artist_name)
-            
-            # Process album year from publish time
-            album_year = ""
-            if album.publish_time:
-                try:
-                    # Convert milliseconds timestamp to datetime
-                    publish_date = datetime.fromtimestamp(album.publish_time / 1000)
-                    album_year = str(publish_date.year)
-                except:
-                    # If conversion fails, use unknown
-                    album_year = "Unknown"
-            else:
-                album_year = "Unknown"
-                
-            # Process album name
-            album_name = album.album_name
-            album_name = self._sanitize_filename(album_name)
-            
-            # Process CD number
-            cd_number = song.cd_number if song.cd_number else "01"
-            
-            # Process track number
-            track_number = str(song.track_number).zfill(2) if song.track_number else "00"
-            
-            # Process song name
-            song_name = song.song_name
-            song_name = self._sanitize_filename(song_name)
-            
-            # Create path components
-            music_base_dir = os.path.join(os.getcwd(), "Download", "MusicLibrary")
-            artist_dir = os.path.join(music_base_dir, artist_name)
-            album_dir = os.path.join(artist_dir, f"{album_year}-{album_name}")
-            
-            # Create final filename
-            filename = f"{cd_number}-{track_number}-{song_name}{ext}"
-            dest_path = os.path.join(album_dir, filename)
+            # Get destination path
+            dest_path = self.get_archive_path(song, album, ext)
             
             # Create directory structure
-            os.makedirs(album_dir, exist_ok=True)
-            
-            # Check if file already exists
-            if os.path.exists(dest_path):
-                print(f"Warning: File already exists at {dest_path}")
-                # Append number to filename to make it unique
-                base_name, ext = os.path.splitext(filename)
-                counter = 1
-                while os.path.exists(os.path.join(album_dir, f"{base_name} ({counter}){ext}")):
-                    counter += 1
-                filename = f"{base_name} ({counter}){ext}"
-                dest_path = os.path.join(album_dir, filename)
+            os.makedirs(os.path.dirname(dest_path), exist_ok=True)
             
             # Copy file to destination
             import shutil
@@ -1089,6 +1091,12 @@ if __name__ == "__main__":
                 if not download_info or not download_info.url:
                     print_error(f"Failed to get download URL for '{song.song_name}', skipping.")
                     continue
+
+                archive_path = grabber.get_archive_path(song, album, download_info.ext_name)
+                if os.path.exists(archive_path):
+                    print_success(f"Song already exists in archive: {archive_path}")
+                    success_count += 1
+                    continue
                 
                 # Download the song
                 print_info(f"Downloading '{song.song_name}'...")
@@ -1107,7 +1115,7 @@ if __name__ == "__main__":
                 
                 # Archive song
                 print_info(f"Archiving '{song.song_name}' to music library...")
-                archive_path = grabber.archive_song_file(file_path, song, album)
+                archive_path = grabber.archive_song_file(file_path, download_info.ext_name, song, album)
                 
                 if archive_path:
                     print_success(f"Song archived to: {archive_path}")
